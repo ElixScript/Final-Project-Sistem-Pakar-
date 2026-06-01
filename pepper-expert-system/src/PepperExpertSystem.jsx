@@ -4,7 +4,12 @@ import {
   SYMPTOMS,
   RULES,
   CERTAINTY_LEVELS,
+  FORWARD_SYMPTOMS,
   calculateCFForDisease,
+  calculateDS,
+  getNextQuestion,
+  shouldTerminateEarly,
+  MAX_QUESTIONS
 } from "./rule.js";
 import ExplanationFacility from "./ExplanationFacility.jsx";
 
@@ -43,205 +48,204 @@ const S = {
 // Mengelola state pemilihan gejala dan menampilkan hasil diagnosis.
 // ================================================================
 export default function PepperExpertSystem() {
-  const [selected, setSelected]         = useState({});
+  const [flowState, setFlowState] = useState("INITIAL");
+  const [answeredSymptoms, setAnsweredSymptoms] = useState({});
   const [diagnosisData, setDiagnosisData] = useState(null);
+  const [initialAnswers, setInitialAnswers] = useState({
+    G9: 0, G4: 0, G10: 0, G1: 0, G3: 0
+  });
+  const [questionCount, setQuestionCount] = useState(0);
 
   // ── Handler ──────────────────────────────────────────────────
-  const handleChange = (gCode, val) => {
-    setSelected((prev) => ({ ...prev, [gCode]: parseFloat(val) }));
+  const handleStartInvestigation = () => {
+    const hasPositive = Object.values(initialAnswers).some(v => v > 0);
+    if (!hasPositive) return alert("Harap pilih minimal satu gejala yang dialami.");
+
+    setAnsweredSymptoms(initialAnswers);
+    setQuestionCount(5);
+
+    const cfResults = {};
+    Object.keys(DISEASES).forEach((p) => { cfResults[p] = calculateCFForDisease(p, initialAnswers); });
+    const sortedCF = Object.values(cfResults).sort((a, b) => b.percentage - a.percentage);
+    const topCF = sortedCF.length > 0 ? sortedCF[0].percentage : 0;
+
+    if (topCF >= 80) {
+      finalizeDiagnosis(initialAnswers);
+    } else {
+      setFlowState("QUESTIONING");
+    }
   };
 
-  const handleDiagnose = () => {
-    const hasAny = Object.values(selected).some((v) => v > 0);
-    if (!hasAny) {
-      alert("Pilih minimal satu gejala terlebih dahulu.");
+  const handleAnswerQuestion = (symCode, cfValue) => {
+    const newAnswered = { ...answeredSymptoms, [symCode]: cfValue };
+    const newCount = questionCount + 1;
+    setAnsweredSymptoms(newAnswered);
+    setQuestionCount(newCount);
+
+    if (shouldTerminateEarly(newAnswered) || newCount >= MAX_QUESTIONS) {
+      finalizeDiagnosis(newAnswered);
       return;
     }
 
-    // Jalankan CF untuk setiap penyakit
+    const nextQ = getNextQuestion(newAnswered);
+    if (!nextQ) finalizeDiagnosis(newAnswered);
+  };
+
+  const finalizeDiagnosis = (answersToUse = answeredSymptoms) => {
     const cfResults = {};
-    Object.keys(DISEASES).forEach((p) => {
-      cfResults[p] = calculateCFForDisease(p, selected);
-    });
-
+    Object.keys(DISEASES).forEach((p) => { cfResults[p] = calculateCFForDisease(p, answersToUse); });
     const sortedCF = Object.values(cfResults).sort((a, b) => b.percentage - a.percentage);
+    const dsResults = calculateDS(answersToUse);
 
-    setDiagnosisData({
-      selectedSymptoms: { ...selected },
-      cfResults,
-      sortedCF,
-      timestamp: new Date().toLocaleString("id-ID"),
-    });
+    setDiagnosisData({ selectedSymptoms: answersToUse, cfResults, sortedCF, dsResults, timestamp: new Date().toLocaleString("id-ID") });
+    setFlowState("RESULT");
   };
 
   const handleReset = () => {
-    setSelected({});
-    setDiagnosisData(null);
+    setFlowState("INITIAL"); setAnsweredSymptoms({}); setDiagnosisData(null);
+    setInitialAnswers({ G9: 0, G4: 0, G10: 0, G1: 0, G3: 0 }); setQuestionCount(0);
   };
 
-  const selectedCount = Object.values(selected).filter((v) => v > 0).length;
-
   // ── Render ───────────────────────────────────────────────────
+  let content;
+  
+  if (flowState === "INITIAL") {
+    // LAYAR 1: 5 Gejala Paling Signifikan
+    content = (
+      <section style={S.section}>
+        <h2 style={S.h2}>Langkah 1: Pilih Gejala yang Dialami</h2>
+        <p style={S.hint}>Pilih tingkat keyakinan untuk setiap gejala berikut:</p>
+        <div style={S.card}>
+          {FORWARD_SYMPTOMS.map(code => (
+            <div key={code} style={{ marginBottom: 10, padding: 8, border: "1px solid #e0e0e0", borderRadius: 4 }}>
+              <label style={{ display: "block", marginBottom: 4, fontWeight: "bold", fontSize: 13 }}>
+                [{code}] {SYMPTOMS[code].name}
+              </label>
+              <select value={initialAnswers[code]} onChange={(e) => setInitialAnswers(prev => ({...prev, [code]: parseFloat(e.target.value)}))} style={S.select}>
+                <option value={0}>Tidak Ada</option>
+                {CERTAINTY_LEVELS.map(lvl => (
+                  <option key={lvl.value} value={lvl.value}>{lvl.label}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+          <button onClick={handleStartInvestigation} style={{...S.btnPrimary, marginTop: 8}}>🚀 Mulai Analisis</button>
+        </div>
+      </section>
+    );
+
+  } else if (flowState === "QUESTIONING") {
+    // LAYAR 2: Pertanyaan Dinamis (Backward Chaining)
+    const currentQ = getNextQuestion(answeredSymptoms);
+    if (!currentQ) { finalizeDiagnosis(); return null; }
+    
+    content = (
+      <section style={S.section}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <h2 style={S.h2}>Sesi Wawancara Sistem</h2>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "#666" }}>{questionCount}/{MAX_QUESTIONS}</span>
+            <button onClick={() => finalizeDiagnosis()} style={S.btnOutline}>Lihat Hasil Sekarang</button>
+          </div>
+        </div>
+        <div style={S.card}>
+          {currentQ.reasonHypothesis ? (
+             <div style={S.badgeInfo}>
+               💡 Hipotesis Sistem: Menguji kemungkinan <strong>{currentQ.reasonName}</strong>
+             </div>
+          ) : (
+            <div style={{...S.badgeInfo, backgroundColor:"#fff3e0", color:"#e65100"}}>
+               🔍 Mencari petunjuk baru...
+            </div>
+          )}
+          <h3 style={{ fontSize: 20, marginTop: 0 }}>Apakah tanaman mengalami gejala berikut?</h3>
+          <p style={{ fontSize: 18, color: "#1b5e20", fontWeight: "bold", padding: "16px", backgroundColor: "#e8f5e9", borderRadius: 8, borderLeft: "4px solid #43a047" }}>
+            [{currentQ.symptomCode}] - {currentQ.symptomName}
+          </p>
+          <div style={S.answerGrid}>
+            {CERTAINTY_LEVELS.map(lvl => (
+              <button key={lvl.value} onClick={() => handleAnswerQuestion(currentQ.symptomCode, lvl.value)} style={{...S.btnOutline, borderColor: "#1976d2", color: "#1976d2"}}>
+                Ya, {lvl.label}
+              </button>
+            ))}
+            <button onClick={() => handleAnswerQuestion(currentQ.symptomCode, 0)} style={S.btnGray}>Tidak / Lewati</button>
+          </div>
+        </div>
+      </section>
+    );
+
+  } else if (flowState === "RESULT" && diagnosisData) {
+    // LAYAR 3: Hasil Akhir (CF vs DS) beserta Explanation Facility
+    const { sortedCF, dsResults } = diagnosisData;
+    
+    content = (
+      <section style={S.section}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={S.h2}>Hasil Diagnosis Akhir</h2>
+          <button onClick={handleReset} style={{...S.btnPrimary, width: "auto", padding: "8px 16px"}}>🔄 Ulangi Diagnosis</button>
+        </div>
+
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 24, marginTop: 20 }}>
+          {/* Tabel CF */}
+          <div style={{ flex: "1 1 300px" }}>
+            <h3 style={{ color: "#1b5e20", borderBottom: "2px solid #43a047", paddingBottom: 8 }}>Metode Certainty Factor (CF)</h3>
+            <div style={S.tableWrap}>
+              <table style={S.table}>
+                <thead>
+                  <tr><th style={S.th}>Rank</th><th style={S.th}>Penyakit</th><th style={{...S.th, textAlign: "right"}}>%</th></tr>
+                </thead>
+                <tbody>
+                  {sortedCF.slice(0, 3).map((r, idx) => (
+                    <tr key={r.diseaseCode} style={idx === 0 ? {backgroundColor: "#f1f8e9", fontWeight: "bold"} : {}}>
+                      <td style={S.td}>{idx + 1}</td><td style={S.td}>{r.diseaseName}</td><td style={{...S.td, textAlign: "right", color: r.percentage > 0 ? "#2e7d32" : "#aaa"}}>{r.percentage}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Tabel DS */}
+          <div style={{ flex: "1 1 300px" }}>
+            <h3 style={{ color: "#4a148c", borderBottom: "2px solid #ab47bc", paddingBottom: 8 }}>Metode Dempster-Shafer (D-S)</h3>
+            <div style={S.tableWrap}>
+              <table style={S.table}>
+                <thead>
+                  <tr><th style={{...S.th, backgroundColor: "#f3e5f5"}}>Rank</th><th style={{...S.th, backgroundColor: "#f3e5f5"}}>Penyakit</th><th style={{...S.th, backgroundColor: "#f3e5f5", textAlign: "right"}}>%</th></tr>
+                </thead>
+                <tbody>
+                  {dsResults.slice(0, 3).map((r, idx) => (
+                    <tr key={r.diseaseCode} style={idx === 0 ? {backgroundColor: "#fbf3fd", fontWeight: "bold"} : {}}>
+                      <td style={S.td}>{idx + 1}</td><td style={S.td}>{r.diseaseName}</td><td style={{...S.td, textAlign: "right", color: r.percentage > 0 ? "#6a1b9a" : "#aaa"}}>{r.percentage}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Fasilitas Penjelasan Asli */}
+        <div style={{ marginTop: 32, borderTop: "1px dashed #ccc", paddingTop: 20 }}>
+          <h2 style={S.h2}>Fasilitas Penjelasan (Trace CF)</h2>
+          <ExplanationFacility diagnosisData={diagnosisData} rulesData={RULES} />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <div style={S.root}>
-
-      {/* ── HEADER ── */}
       <div style={S.header}>
-        <h1 style={S.h1}>Sistem Pakar: Diagnosis Penyakit Tanaman Lada</h1>
+        <h1 style={S.h1}>Sistem Pakar Lada: Interaktif</h1>
         <p style={S.subtitle}>
-          Metode: Certainty Factor (CF)&nbsp;|&nbsp;
-          Referensi: Karmila, Maria E., Annafi Franz — TEPIAN 2021
+          Forward-Backward Chaining Engine | Dempster-Shafer & Certainty Factor
         </p>
       </div>
+      
+      {/* Memanggil tampilan layar yang aktif sesuai state */}
+      {content}
 
-      {/* ══════════════════════════════════════════════════════════
-          LANGKAH 1 — PEMILIHAN GEJALA
-          ══════════════════════════════════════════════════════════ */}
-      <section style={S.section}>
-        <h2 style={S.h2}>Langkah 1 — Pilih Gejala yang Diamati</h2>
-        <p style={S.hint}>
-          Centang semua gejala yang diamati dan pilih tingkat keyakinan Anda.
-          &nbsp;({selectedCount} / {Object.keys(SYMPTOMS).length} gejala dipilih)
-        </p>
-
-        <div style={S.tableWrap}>
-          <table style={S.table}>
-            <thead>
-              <tr>
-                <th style={{ ...S.th, width: 52 }}>Kode</th>
-                <th style={S.th}>Nama Gejala</th>
-                <th style={{ ...S.th, width: 68, textAlign: "center" }}>Bobot CF(H,E)</th>
-                <th style={{ ...S.th, width: 220 }}>Tingkat Keyakinan CF(E,e)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(SYMPTOMS).map(([code, sym]) => {
-                const isSel = selected[code] > 0;
-                return (
-                  <tr key={code} style={isSel ? S.rowSel : {}}>
-                    <td style={{ ...S.td, fontWeight: 700, color: "#2e7d32" }}>{code}</td>
-                    <td style={S.td}>{sym.name}</td>
-                    <td style={{ ...S.td, textAlign: "center", color: "#666" }}>{sym.weight}</td>
-                    <td style={S.td}>
-                      <select
-                        value={selected[code] || 0}
-                        onChange={(e) => handleChange(code, e.target.value)}
-                        style={S.select}
-                      >
-                        <option value={0}>— Tidak Dipilih —</option>
-                        {CERTAINTY_LEVELS.map((lvl) => (
-                          <option key={lvl.value} value={lvl.value}>
-                            {lvl.label} ({lvl.value})
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={S.btnRow}>
-          <button onClick={handleDiagnose} style={S.btnPrimary}>
-            🔍 Diagnosa
-          </button>
-          <button onClick={handleReset} style={S.btnGray}>
-            ↩ Reset
-          </button>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════════════════════
-          LANGKAH 2 — HASIL DIAGNOSIS (Ranking Penyakit)
-          ══════════════════════════════════════════════════════════ */}
-      {diagnosisData && (
-        <section style={S.section}>
-          <h2 style={S.h2}>Langkah 2 — Hasil Diagnosis</h2>
-          <p style={S.hint}>Didiagnosis pada: {diagnosisData.timestamp}</p>
-
-          {/* Banner diagnosis utama */}
-          <div style={S.banner}>
-            <span style={S.bannerLabel}>Diagnosa Utama: </span>
-            <span style={S.bannerVal}>
-              {diagnosisData.sortedCF[0]?.percentage > 0
-                ? `${diagnosisData.sortedCF[0].diseaseName} — ${diagnosisData.sortedCF[0].percentage}%`
-                : "Tidak ditemukan penyakit yang cocok"}
-            </span>
-          </div>
-
-          {/* Tabel Ranking Penyakit */}
-          <h3 style={S.h3}>Ranking Nilai Certainty Factor — Semua Penyakit</h3>
-          <div style={S.tableWrap}>
-            <table style={S.table}>
-              <thead>
-                <tr>
-                  <th style={{ ...S.th, width: 48, textAlign: "center" }}>Rank</th>
-                  <th style={{ ...S.th, width: 58 }}>Kode</th>
-                  <th style={S.th}>Nama Penyakit</th>
-                  <th style={{ ...S.th, width: 90, textAlign: "center" }}>Nilai CF</th>
-                  <th style={{ ...S.th, width: 110, textAlign: "center" }}>Persentase (%)</th>
-                  <th style={{ ...S.th, width: 170 }}>Gejala Cocok</th>
-                </tr>
-              </thead>
-              <tbody>
-                {diagnosisData.sortedCF.map((r, idx) => (
-                  <tr key={r.diseaseCode} style={idx === 0 && r.percentage > 0 ? S.rowTop : {}}>
-                    <td style={{ ...S.td, textAlign: "center" }}>{idx + 1}</td>
-                    <td style={{ ...S.td, fontWeight: 700 }}>{r.diseaseCode}</td>
-                    <td style={{ ...S.td, fontWeight: idx === 0 && r.percentage > 0 ? 700 : 400 }}>
-                      {r.diseaseName}
-                    </td>
-                    <td style={{ ...S.td, textAlign: "center" }}>{r.combinedCF}</td>
-                    <td style={{ ...S.td, textAlign: "center" }}>
-                      <span
-                        style={{
-                          color: r.percentage > 0 ? "#2e7d32" : "#bbb",
-                          fontWeight: r.percentage > 0 ? 700 : 400,
-                        }}
-                      >
-                        {r.percentage}%
-                      </span>
-                    </td>
-                    <td style={{ ...S.td, fontSize: 12, color: "#555" }}>
-                      {r.matchedCodes.length > 0
-                        ? r.matchedCodes.join(", ")
-                        : <span style={{ color: "#ccc" }}>—</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════
-          FASILITAS PENJELASAN
-          ══════════════════════════════════════════════════════════ */}
-      <section style={S.section} id="explanation-facility">
-        <div style={S.efTitleRow}>
-          <h2 style={{ ...S.h2, margin: 0 }}>Fasilitas Penjelasan (Explanation Facility)</h2>
-          <span style={S.efBadge}>HOW &amp; WHY</span>
-        </div>
-        <p style={{ ...S.hint, marginTop: 8 }}>
-          Bagian ini menjelaskan <strong>bagaimana</strong> dan <strong>mengapa</strong> sistem
-          mencapai kesimpulan tersebut — termasuk jejak aturan, kontribusi tiap gejala, dan
-          langkah demi langkah perhitungan CF.
-        </p>
-
-        <ExplanationFacility diagnosisData={diagnosisData} rulesData={RULES} />
-      </section>
-
-      {/* ── FOOTER ── */}
-      <footer style={S.footer}>
-        Karmila, Maria E., &amp; Annafi' Franz (2021).{" "}
-        <em>
-          Expert System for Diagnosis of Pepper Plant Diseases Using Certainty Factor and Naïve Bayes Methods.
-        </em>{" "}
-        TEPIAN, 2(4). https://doi.org/10.51967/tepian.v2i4.744
-      </footer>
     </div>
   );
-}
+} 

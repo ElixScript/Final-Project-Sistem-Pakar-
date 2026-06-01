@@ -82,6 +82,11 @@ export const CERTAINTY_LEVELS = [
   { label: "Ragu-Ragu",     value: 0.25 },
 ];
 
+export const FORWARD_SYMPTOMS = ["G9", "G4", "G10", "G1", "G3"];
+export const MAX_QUESTIONS = 12;
+export const CF_THRESHOLD = 60;
+export const CF_GAP = 15;
+
 // ================================================================
 // INFERENCE ENGINE — CERTAINTY FACTOR
 // ================================================================
@@ -177,4 +182,110 @@ export function calculateCFForDisease(diseaseCode, selectedSymptoms) {
     symptomCFs,
     combinationSteps,
   };
+}
+
+// Inference Engine — Dempster-Shafer Theory (DST)
+function combineDS(m1, m2, OMEGA) {
+  const m_new = {};
+  let K = 0;
+  for (const [set1, prob1] of Object.entries(m1)) {
+    const arr1 = set1 === "OMEGA" ? OMEGA : set1.split(",");
+    for (const [set2, prob2] of Object.entries(m2)) {
+      const arr2 = set2 === "OMEGA" ? OMEGA : set2.split(",");
+      let intersect = arr1.filter(x => arr2.includes(x));
+      const prob = prob1 * prob2;
+      if (intersect.length === 0) K += prob;
+      else {
+        const key = intersect.length === OMEGA.length ? "OMEGA" : intersect.sort().join(",");
+        m_new[key] = (m_new[key] || 0) + prob;
+      }
+    }
+  }
+  if (K >= 1) return { "OMEGA": 1.0 };
+  const final_m = {};
+  for (const [set, prob] of Object.entries(m_new)) final_m[set] = prob / (1 - K);
+  return final_m;
+}
+
+export function calculateDS(selectedSymptoms) {
+  const OMEGA = Object.keys(DISEASES);
+  const SYMPTOM_TO_DISEASES = {};
+  for (const [p, symptoms] of Object.entries(RULES)) {
+    for (const g of symptoms) {
+      if (!SYMPTOM_TO_DISEASES[g]) SYMPTOM_TO_DISEASES[g] = [];
+      SYMPTOM_TO_DISEASES[g].push(p);
+    }
+  }
+
+  let currentMass = { "OMEGA": 1.0 };
+  const validEntries = Object.entries(selectedSymptoms).filter(([g, cf]) => cf > 0);
+  if (validEntries.length === 0) return [];
+
+  for (const [g, cf] of validEntries) {
+    const weight = SYMPTOMS[g].weight;
+    const m_subset = weight * cf;
+    const m_omega = 1 - m_subset;
+    const subsetArr = SYMPTOM_TO_DISEASES[g] || [];
+    if (subsetArr.length === 0) continue;
+    
+    currentMass = combineDS(currentMass, { [subsetArr.sort().join(",")]: m_subset, "OMEGA": m_omega }, OMEGA);
+  }
+
+  const pignistic = {};
+  OMEGA.forEach(p => pignistic[p] = 0);
+  for (const [setKey, mass] of Object.entries(currentMass)) {
+    const arr = setKey === "OMEGA" ? OMEGA : setKey.split(",");
+    const share = mass / arr.length;
+    arr.forEach(p => { if(pignistic[p] !== undefined) pignistic[p] += share; });
+  }
+
+  return Object.entries(pignistic)
+    .map(([pCode, prob]) => ({ diseaseCode: pCode, diseaseName: DISEASES[pCode].name, percentage: parseFloat((prob * 100).toFixed(2)) }))
+    .sort((a, b) => b.percentage - a.percentage);
+}
+
+export function shouldTerminateEarly(answeredSymptoms) {
+  const cfResults = {};
+  Object.keys(DISEASES).forEach((p) => { cfResults[p] = calculateCFForDisease(p, answeredSymptoms); });
+  const sortedCF = Object.values(cfResults).sort((a, b) => b.percentage - a.percentage);
+
+  if (sortedCF.length === 0 || sortedCF[0].percentage === 0) return false;
+
+  const top = sortedCF[0];
+  const gap = sortedCF.length > 1 ? top.percentage - sortedCF[1].percentage : 100;
+
+  if (top.percentage >= CF_THRESHOLD && gap >= CF_GAP) return true;
+
+  const allTopSymptoms = RULES[top.diseaseCode];
+  const allAnswered = allTopSymptoms.every((sym) => answeredSymptoms[sym] !== undefined);
+  if (allAnswered) return true;
+
+  return false;
+}
+
+// DYNAMIC FORWARD-BACKWARD CHAINING ENGINE (Interogasi)
+export function getNextQuestion(answeredSymptoms) {
+  for (const sym of FORWARD_SYMPTOMS) {
+    if (answeredSymptoms[sym] === undefined) {
+      return { symptomCode: sym, symptomName: SYMPTOMS[sym].name, reasonHypothesis: null, reasonName: null };
+    }
+  }
+
+  const cfResults = {};
+  Object.keys(DISEASES).forEach((p) => { cfResults[p] = calculateCFForDisease(p, answeredSymptoms); });
+  const activeHypotheses = Object.values(cfResults).filter((r) => r.percentage > 0).sort((a, b) => b.percentage - a.percentage);
+
+  for (const hyp of activeHypotheses) {
+    for (const sym of RULES[hyp.diseaseCode]) {
+      if (answeredSymptoms[sym] === undefined) {
+        return { symptomCode: sym, symptomName: SYMPTOMS[sym].name, reasonHypothesis: hyp.diseaseCode, reasonName: hyp.diseaseName };
+      }
+    }
+  }
+  for (const sym of Object.keys(SYMPTOMS)) {
+    if (answeredSymptoms[sym] === undefined) {
+      return { symptomCode: sym, symptomName: SYMPTOMS[sym].name, reasonHypothesis: null, reasonName: null };
+    }
+  }
+  return null;
 }
