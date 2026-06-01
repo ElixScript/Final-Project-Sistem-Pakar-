@@ -164,89 +164,6 @@ function calculateCFForDisease(diseaseCode, selectedSymptoms) {
   };
 }
 
-// ================================================================
-// INFERENCE ENGINE — NAÏVE BAYES
-// ================================================================
-
-/**
- * Calculate posterior probabilities for all diseases using Naïve Bayes.
- *
- * Prior: P(disease) = disease_weight / Σ(all disease weights)  [Table 2]
- * Likelihood per symptom:
- *   P(Gi | Pj) = symptom_weight × user_certainty   if Gi ∈ rule[Pj]
- *              = 0.01                               otherwise (Laplace smoothing)
- * Posterior: P(Pj | evidence) ∝ P(Pj) × ΠP(Gi | Pj) for selected Gi
- * Normalized so all posteriors sum to 1.
- *
- * @param {Object} selectedSymptoms  { G1: 0.75, ... }
- * @returns {Object}  Per-disease NB result (full detail for Explanation Facility).
- *
- * Shape per disease entry:
- * {
- *   diseaseCode, diseaseName,
- *   prior,              // P(H)  — prior probability
- *   likelihood,         // P(X|H) — product of P(Gi|H)
- *   rawPosterior,       // P(H) × P(X|H) before normalization
- *   probability,        // normalized P(H|X)
- *   percentage,
- *   symptomLikelihoods: { G1: 0.45, G3: 0.10 },  // P(Gi|H) per selected symptom
- * }
- */
-function calculateNaiveBayes(selectedSymptoms) {
-  const selectedKeys = Object.keys(selectedSymptoms).filter((g) => selectedSymptoms[g] > 0);
-
-  if (selectedKeys.length === 0) {
-    return Object.fromEntries(
-      Object.keys(DISEASES).map((p) => [
-        p,
-        { diseaseCode: p, diseaseName: DISEASES[p].name, prior: 0, likelihood: 0, rawPosterior: 0, probability: 0, percentage: 0, symptomLikelihoods: {} },
-      ])
-    );
-  }
-
-  const totalWeight = Object.values(DISEASES).reduce((s, d) => s + d.weight, 0);
-
-  const rawPosteriors = {};
-  let totalPosterior = 0;
-
-  Object.entries(DISEASES).forEach(([dCode]) => {
-    const prior = DISEASES[dCode].weight / totalWeight;
-    const ruleSymptoms = RULES[dCode];
-
-    let likelihood = 1;
-    const symptomLikelihoods = {};
-
-    selectedKeys.forEach((g) => {
-      const pGivenD = ruleSymptoms.includes(g)
-        ? SYMPTOMS[g].weight * selectedSymptoms[g]
-        : 0.01; // Laplace smoothing for symptoms not in rule
-      symptomLikelihoods[g] = pGivenD;
-      likelihood *= pGivenD;
-    });
-
-    const rawPosterior = prior * likelihood;
-    rawPosteriors[dCode] = { prior, likelihood, rawPosterior, symptomLikelihoods };
-    totalPosterior += rawPosterior;
-  });
-
-  // Normalize
-  const results = {};
-  Object.entries(rawPosteriors).forEach(([dCode, data]) => {
-    const probability = totalPosterior > 0 ? data.rawPosterior / totalPosterior : 0;
-    results[dCode] = {
-      diseaseCode: dCode,
-      diseaseName: DISEASES[dCode].name,
-      prior: parseFloat(data.prior.toFixed(4)),
-      likelihood: data.likelihood,
-      rawPosterior: data.rawPosterior,
-      probability: parseFloat(probability.toFixed(4)),
-      percentage: parseFloat((probability * 100).toFixed(2)),
-      symptomLikelihoods: data.symptomLikelihoods,
-    };
-  });
-
-  return results;
-}
 
 // ================================================================
 // EXPLANATION FACILITY COMPONENT
@@ -281,29 +198,15 @@ function calculateNaiveBayes(selectedSymptoms) {
 // │      "P2": { ... }, ...                                     │
 // │    },                                                       │
 // │                                                             │
-// │    nbResults: {                                             │
-// │      "P1": {                                                │
-// │        diseaseCode, diseaseName,                            │
-// │        prior,              // P(H) sebelum normalisasi       │
-// │        likelihood,         // P(X|H)                        │
-// │        probability,        // P(H|X) ternormalisasi          │
-// │        percentage,                                          │
-// │        symptomLikelihoods: { "G1": 0.45, ... },            │
-// │      },                                                     │
-// │      ...                                                    │
-// │    },                                                       │
-// │                                                             │
 // │    sortedCF: [...],  // cfResults[] sorted by percentage ↓  │
-// │    sortedNB: [...],  // nbResults[] sorted by percentage ↓  │
 // │    timestamp: "...",                                         │
 // │  }                                                          │
 // │                                                             │
 // │  SARAN KONTEN:                                              │
 // │  1. Rule trace — rule mana yang aktif                       │
 // │  2. CF step-by-step — pakai combinationSteps[]              │
-// │  3. NB step-by-step — pakai symptomLikelihoods & prior      │
-// │  4. Kontribusi gejala — pakai symptomCFs[]                  │
-// │  5. "Kenapa penyakit ini?" — bandingkan top 3               │
+// │  3. Kontribusi gejala — pakai symptomCFs[]                  │
+// │  4. "Kenapa penyakit ini?" — bandingkan top 3               │
 // └─────────────────────────────────────────────────────────────┘
 
 function ExplanationFacility({ diagnosisData }) {
@@ -336,14 +239,6 @@ function ExplanationFacility({ diagnosisData }) {
                   combinationSteps: diagnosisData.sortedCF[0].combinationSteps,
                 }
               : null,
-            topNB: diagnosisData.sortedNB[0]
-              ? {
-                  disease: diagnosisData.sortedNB[0].diseaseName,
-                  percentage: `${diagnosisData.sortedNB[0].percentage}%`,
-                  prior: diagnosisData.sortedNB[0].prior,
-                  symptomLikelihoods: diagnosisData.sortedNB[0].symptomLikelihoods,
-                }
-              : null,
           },
           null,
           2
@@ -364,8 +259,6 @@ function ExplanationFacility({ diagnosisData }) {
 export default function PepperExpertSystem() {
   const [selected, setSelected] = useState({});
   const [diagnosisData, setDiagnosisData] = useState(null);
-  const [activeTab, setActiveTab] = useState("cf");
-
   const handleChange = (gCode, val) => {
     setSelected((prev) => ({ ...prev, [gCode]: parseFloat(val) }));
   };
@@ -383,21 +276,14 @@ export default function PepperExpertSystem() {
       cfResults[p] = calculateCFForDisease(p, selected);
     });
 
-    // Run Naïve Bayes
-    const nbResults = calculateNaiveBayes(selected);
-
     const sortedCF = Object.values(cfResults).sort((a, b) => b.percentage - a.percentage);
-    const sortedNB = Object.values(nbResults).sort((a, b) => b.percentage - a.percentage);
 
     setDiagnosisData({
       selectedSymptoms: { ...selected },
       cfResults,
-      nbResults,
       sortedCF,
-      sortedNB,
       timestamp: new Date().toLocaleString("id-ID"),
     });
-    setActiveTab("cf");
   };
 
   const handleReset = () => {
@@ -414,7 +300,7 @@ export default function PepperExpertSystem() {
       <div style={S.header}>
         <h1 style={S.h1}>Expert System: Pepper Plant Disease Diagnosis</h1>
         <p style={S.subtitle}>
-          Methods: Certainty Factor (CF) + Naïve Bayes &nbsp;|&nbsp;
+          Method: Certainty Factor (CF) &nbsp;|&nbsp;
           Based on: Karmila, Maria E., Annafi Franz — TEPIAN 2021
         </p>
       </div>
@@ -488,156 +374,50 @@ export default function PepperExpertSystem() {
 
           {/* Summary banner */}
           <div style={S.banner}>
-            <div>
-              <span style={S.bannerLabel}>CF Result: </span>
-              <span style={S.bannerVal}>
-                {diagnosisData.sortedCF[0]?.percentage > 0
-                  ? `${diagnosisData.sortedCF[0].diseaseName} — ${diagnosisData.sortedCF[0].percentage}%`
-                  : "No matching disease found"}
-              </span>
-            </div>
-            <div style={{ marginTop: 5 }}>
-              <span style={S.bannerLabel}>NB Result: </span>
-              <span style={S.bannerVal}>
-                {diagnosisData.sortedNB[0]?.percentage > 0
-                  ? `${diagnosisData.sortedNB[0].diseaseName} — ${diagnosisData.sortedNB[0].percentage}%`
-                  : "No matching disease found"}
-              </span>
-            </div>
+            <span style={S.bannerLabel}>Top Diagnosis: </span>
+            <span style={S.bannerVal}>
+              {diagnosisData.sortedCF[0]?.percentage > 0
+                ? `${diagnosisData.sortedCF[0].diseaseName} — ${diagnosisData.sortedCF[0].percentage}%`
+                : "No matching disease found"}
+            </span>
           </div>
 
-          {/* Tab bar */}
-          <div style={S.tabBar}>
-            {[
-              { id: "cf",      label: "Certainty Factor" },
-              { id: "nb",      label: "Naïve Bayes" },
-              { id: "compare", label: "Comparison" },
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                style={activeTab === t.id ? S.tabActive : S.tab}
-              >
-                {t.label}
-              </button>
-            ))}
+          {/* CF Results Table */}
+          <h3 style={S.h3}>Certainty Factor Results — all diseases</h3>
+          <div style={S.tableWrap}>
+            <table style={S.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...S.th, width: 48, textAlign: "center" }}>Rank</th>
+                  <th style={{ ...S.th, width: 58 }}>Code</th>
+                  <th style={S.th}>Disease Name</th>
+                  <th style={{ ...S.th, width: 90, textAlign: "center" }}>CF Value</th>
+                  <th style={{ ...S.th, width: 110, textAlign: "center" }}>Percentage</th>
+                  <th style={{ ...S.th, width: 170 }}>Matched Symptoms</th>
+                </tr>
+              </thead>
+              <tbody>
+                {diagnosisData.sortedCF.map((r, idx) => (
+                  <tr key={r.diseaseCode} style={idx === 0 && r.percentage > 0 ? S.rowTop : {}}>
+                    <td style={{ ...S.td, textAlign: "center" }}>{idx + 1}</td>
+                    <td style={{ ...S.td, fontWeight: 700 }}>{r.diseaseCode}</td>
+                    <td style={{ ...S.td, fontWeight: idx === 0 && r.percentage > 0 ? 700 : 400 }}>
+                      {r.diseaseName}
+                    </td>
+                    <td style={{ ...S.td, textAlign: "center" }}>{r.combinedCF}</td>
+                    <td style={{ ...S.td, textAlign: "center" }}>
+                      <span style={{ color: r.percentage > 0 ? "#2e7d32" : "#bbb", fontWeight: r.percentage > 0 ? 700 : 400 }}>
+                        {r.percentage}%
+                      </span>
+                    </td>
+                    <td style={{ ...S.td, fontSize: 12, color: "#555" }}>
+                      {r.matchedCodes.length > 0 ? r.matchedCodes.join(", ") : <span style={{ color: "#ccc" }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-
-          {/* ── CF TAB ── */}
-          {activeTab === "cf" && (
-            <div>
-              <h3 style={S.h3}>Certainty Factor Results — all diseases</h3>
-              <div style={S.tableWrap}>
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...S.th, width: 48, textAlign: "center" }}>Rank</th>
-                      <th style={{ ...S.th, width: 58 }}>Code</th>
-                      <th style={S.th}>Disease Name</th>
-                      <th style={{ ...S.th, width: 90, textAlign: "center" }}>CF Value</th>
-                      <th style={{ ...S.th, width: 110, textAlign: "center" }}>Percentage</th>
-                      <th style={{ ...S.th, width: 170 }}>Matched Symptoms</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {diagnosisData.sortedCF.map((r, idx) => (
-                      <tr key={r.diseaseCode} style={idx === 0 && r.percentage > 0 ? S.rowTop : {}}>
-                        <td style={{ ...S.td, textAlign: "center" }}>{idx + 1}</td>
-                        <td style={{ ...S.td, fontWeight: 700 }}>{r.diseaseCode}</td>
-                        <td style={{ ...S.td, fontWeight: idx === 0 && r.percentage > 0 ? 700 : 400 }}>
-                          {r.diseaseName}
-                        </td>
-                        <td style={{ ...S.td, textAlign: "center" }}>{r.combinedCF}</td>
-                        <td style={{ ...S.td, textAlign: "center" }}>
-                          <span style={{ color: r.percentage > 0 ? "#2e7d32" : "#bbb", fontWeight: r.percentage > 0 ? 700 : 400 }}>
-                            {r.percentage}%
-                          </span>
-                        </td>
-                        <td style={{ ...S.td, fontSize: 12, color: "#555" }}>
-                          {r.matchedCodes.length > 0 ? r.matchedCodes.join(", ") : <span style={{ color: "#ccc" }}>—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ── NB TAB ── */}
-          {activeTab === "nb" && (
-            <div>
-              <h3 style={S.h3}>Naïve Bayes Results — all diseases</h3>
-              <div style={S.tableWrap}>
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...S.th, width: 48, textAlign: "center" }}>Rank</th>
-                      <th style={{ ...S.th, width: 58 }}>Code</th>
-                      <th style={S.th}>Disease Name</th>
-                      <th style={{ ...S.th, width: 80, textAlign: "center" }}>Prior P(H)</th>
-                      <th style={{ ...S.th, width: 100, textAlign: "center" }}>Probability P(H|X)</th>
-                      <th style={{ ...S.th, width: 110, textAlign: "center" }}>Percentage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {diagnosisData.sortedNB.map((r, idx) => (
-                      <tr key={r.diseaseCode} style={idx === 0 && r.percentage > 0 ? S.rowTop : {}}>
-                        <td style={{ ...S.td, textAlign: "center" }}>{idx + 1}</td>
-                        <td style={{ ...S.td, fontWeight: 700 }}>{r.diseaseCode}</td>
-                        <td style={{ ...S.td, fontWeight: idx === 0 && r.percentage > 0 ? 700 : 400 }}>
-                          {r.diseaseName}
-                        </td>
-                        <td style={{ ...S.td, textAlign: "center" }}>{r.prior}</td>
-                        <td style={{ ...S.td, textAlign: "center" }}>{r.probability}</td>
-                        <td style={{ ...S.td, textAlign: "center" }}>
-                          <span style={{ color: r.percentage > 0 ? "#1565c0" : "#bbb", fontWeight: r.percentage > 0 ? 700 : 400 }}>
-                            {r.percentage}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ── COMPARISON TAB ── */}
-          {activeTab === "compare" && (
-            <div>
-              <h3 style={S.h3}>CF vs Naïve Bayes — side by side</h3>
-              <div style={S.tableWrap}>
-                <table style={S.table}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...S.th, width: 58 }}>Code</th>
-                      <th style={S.th}>Disease Name</th>
-                      <th style={{ ...S.th, width: 110, textAlign: "center" }}>CF (%)</th>
-                      <th style={{ ...S.th, width: 110, textAlign: "center" }}>NB (%)</th>
-                      <th style={{ ...S.th, width: 100, textAlign: "center" }}>|Δ| (%)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.keys(DISEASES).map((code) => {
-                      const cfPct = diagnosisData.cfResults[code].percentage;
-                      const nbPct = diagnosisData.nbResults[code].percentage;
-                      const diff = Math.abs(cfPct - nbPct).toFixed(2);
-                      return (
-                        <tr key={code}>
-                          <td style={{ ...S.td, fontWeight: 700 }}>{code}</td>
-                          <td style={S.td}>{DISEASES[code].name}</td>
-                          <td style={{ ...S.td, textAlign: "center", color: cfPct > 0 ? "#2e7d32" : "#999" }}>{cfPct}%</td>
-                          <td style={{ ...S.td, textAlign: "center", color: nbPct > 0 ? "#1565c0" : "#999" }}>{nbPct}%</td>
-                          <td style={{ ...S.td, textAlign: "center", color: "#888", fontSize: 12 }}>Δ {diff}%</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </section>
       )}
 
