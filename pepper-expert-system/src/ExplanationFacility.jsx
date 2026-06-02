@@ -1,248 +1,73 @@
 import { useState } from "react";
 import { SYMPTOMS } from "./rule.js";
 
-// ================================================================
-// EXPLANATION FACILITY COMPONENT
-// Menjelaskan HOW & WHY sistem mencapai kesimpulan diagnosis.
-// ================================================================
-
-// ── Styles lokal untuk komponen ini ────────────────────────────
-const EF = {
-  wrapper: {
-    fontFamily: "'Segoe UI', Arial, sans-serif",
-    fontSize: 13,
-    color: "#212121",
-    lineHeight: 1.6,
-  },
-  empty: {
-    padding: 28,
-    textAlign: "center",
-    color: "#795548",
-    backgroundColor: "#fff8e1",
-    border: "2px dashed #ffb74d",
-    borderRadius: 8,
-    fontSize: 14,
-  },
-
-  // ── Tab bar ─────────────────────────────────────────────────
-  tabBar: {
-    display: "flex",
-    gap: 6,
-    marginBottom: 16,
-    flexWrap: "wrap",
-    borderBottom: "2px solid #e0e0e0",
-    paddingBottom: 0,
-  },
-  tab: (active) => ({
-    padding: "7px 18px",
-    backgroundColor: active ? "#2e7d32" : "#f5f5f5",
-    color: active ? "#fff" : "#555",
-    border: active ? "2px solid #2e7d32" : "2px solid #e0e0e0",
-    borderBottom: "none",
-    borderRadius: "6px 6px 0 0",
-    cursor: "pointer",
-    fontSize: 13,
-    fontWeight: active ? 700 : 400,
-    marginBottom: -2,
-    transition: "all 0.15s ease",
-  }),
-
-  // ── Kartu ringkasan ─────────────────────────────────────────
-  summaryRow: {
-    display: "flex",
-    gap: 12,
-    marginBottom: 16,
-    flexWrap: "wrap",
-  },
-  card: (color) => ({
-    flex: "1 1 160px",
-    backgroundColor: color || "#e8f5e9",
-    borderRadius: 8,
-    padding: "12px 16px",
-    border: "1px solid #c8e6c9",
-  }),
-  cardLabel: {
-    fontSize: 11,
-    color: "#555",
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  cardValue: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: "#1b5e20",
-  },
-  cardSub: {
-    fontSize: 11,
-    color: "#777",
-    marginTop: 2,
-  },
-
-  // ── Tabel umum ─────────────────────────────────────────────
-  tableWrap: { overflowX: "auto", marginBottom: 16 },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: {
-    border: "1px solid #bbb",
-    padding: "7px 10px",
-    backgroundColor: "#e8f5e9",
-    fontWeight: 700,
-    textAlign: "left",
-    whiteSpace: "nowrap",
-  },
-  td: {
-    border: "1px solid #e0e0e0",
-    padding: "6px 10px",
-    verticalAlign: "middle",
-  },
-  tdCenter: {
-    border: "1px solid #e0e0e0",
-    padding: "6px 10px",
-    textAlign: "center",
-    verticalAlign: "middle",
-  },
-
-  // ── Step kombinasi CF ───────────────────────────────────────
-  stepBox: (isFirst) => ({
-    borderLeft: `4px solid ${isFirst ? "#43a047" : "#1976d2"}`,
-    backgroundColor: isFirst ? "#f1f8e9" : "#e3f2fd",
-    borderRadius: "0 6px 6px 0",
-    padding: "10px 14px",
-    marginBottom: 8,
-  }),
-  stepTitle: {
-    fontWeight: 700,
-    fontSize: 12,
-    color: "#555",
-    marginBottom: 4,
-  },
-  stepFormula: {
-    fontFamily: "'Courier New', Courier, monospace",
-    fontSize: 12.5,
-    color: "#1a237e",
-    wordBreak: "break-all",
-  },
-  stepResult: {
-    fontWeight: 700,
-    color: "#2e7d32",
-    fontSize: 13,
-    marginTop: 4,
-  },
-
-  // ── Rule trace ──────────────────────────────────────────────
-  ruleBlock: (active) => ({
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: "10px 14px",
-    borderRadius: 6,
-    marginBottom: 8,
-    backgroundColor: active ? "#e8f5e9" : "#fafafa",
-    border: `1px solid ${active ? "#a5d6a7" : "#e0e0e0"}`,
-    opacity: active ? 1 : 0.6,
-  }),
-  ruleBadge: (active) => ({
-    flexShrink: 0,
-    padding: "2px 10px",
-    borderRadius: 12,
-    fontSize: 11,
-    fontWeight: 700,
-    backgroundColor: active ? "#2e7d32" : "#bdbdbd",
-    color: "#fff",
-    marginTop: 2,
-  }),
-  ruleText: { flex: 1 },
-  ruleName: { fontWeight: 700, fontSize: 13, color: "#1b5e20" },
-  ruleGejala: { fontSize: 12, color: "#555", marginTop: 2 },
-  gejalaChip: (matched) => ({
-    display: "inline-block",
-    padding: "1px 7px",
-    borderRadius: 10,
-    margin: "2px 3px 2px 0",
-    fontSize: 11,
-    fontWeight: matched ? 700 : 400,
-    backgroundColor: matched ? "#c8e6c9" : "#f5f5f5",
-    color: matched ? "#1b5e20" : "#999",
-    border: `1px solid ${matched ? "#81c784" : "#e0e0e0"}`,
-  }),
-
-  // ── Progress bar ────────────────────────────────────────────
-  barWrap: { backgroundColor: "#e0e0e0", borderRadius: 6, height: 10, overflow: "hidden", flex: 1 },
-  bar: (pct, color) => ({
-    height: "100%",
-    width: `${Math.min(pct, 100)}%`,
-    backgroundColor: color || "#43a047",
-    borderRadius: 6,
-    transition: "width 0.4s ease",
-  }),
-
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: "#2e7d32",
-    marginBottom: 10,
-    paddingBottom: 4,
-    borderBottom: "1px solid #e0e0e0",
-  },
-  infoBox: {
-    backgroundColor: "#e3f2fd",
-    border: "1px solid #90caf9",
-    borderRadius: 6,
-    padding: "10px 14px",
-    marginBottom: 12,
-    fontSize: 12.5,
-    color: "#1a237e",
-    lineHeight: 1.7,
-  },
+// ── Minimal style tokens ─────────────────────────────────────────
+const c = {
+  surface: "white",
+  surface2: "#f0f4f1",
+  border: "#dde8de",
+  forest700: "#1e5224",
+  forest600: "#256b2d",
+  forest500: "#2e8438",
+  forest400: "#4aa856",
+  forest200: "#a3d9aa",
+  forest100: "#d4efd7",
+  forest50:  "#edf7ee",
+  text: "#0f2912",
+  textSecondary: "#3d6642",
+  textMuted: "#6b8c70",
+  textFaint: "#9db8a1",
+  monoFont: "'JetBrains Mono', 'Courier New', monospace",
+  bodyFont: "'DM Sans', system-ui, sans-serif",
 };
 
-// ── Warna peringkat diagnosis ────────────────────────────────
-function rankColor(idx) {
-  if (idx === 0) return { bg: "#c8e6c9", border: "#81c784", text: "#1b5e20" };
-  if (idx === 1) return { bg: "#fff9c4", border: "#fff176", text: "#f57f17" };
-  if (idx === 2) return { bg: "#ffccbc", border: "#ffab91", text: "#bf360c" };
-  return { bg: "#f5f5f5", border: "#e0e0e0", text: "#757575" };
+function rankStyle(idx) {
+  if (idx === 0) return { bg: c.forest50, border: c.forest200, text: c.forest700, accent: c.forest500 };
+  if (idx === 1) return { bg: "#fffbeb", border: "#fde68a", text: "#92400e", accent: "#d97706" };
+  if (idx === 2) return { bg: "#fff1f2", border: "#fecdd3", text: "#9f1239", accent: "#e11d48" };
+  return { bg: "#fafafa", border: "#e5e7eb", text: "#6b7280", accent: "#9ca3af" };
 }
 
-// ================================================================
-// SUB-VIEW 1: Kontribusi Gejala
-// ================================================================
+function ProgressBar({ pct, color = c.forest500, height = 6 }) {
+  return (
+    <div style={{ background: "#e5e7eb", borderRadius: 99, height, overflow: "hidden", flex: 1 }}>
+      <div className="bar-animated" style={{ height: "100%", width: `${Math.min(pct,100)}%`, background: color, borderRadius: 99 }} />
+    </div>
+  );
+}
+
+// ── Tab: Gejala ─────────────────────────────────────────────────
 function TabGejala({ diagnosisData }) {
   const { selectedSymptoms } = diagnosisData;
-  const selectedEntries = Object.entries(selectedSymptoms).filter(([, v]) => v > 0);
+  const entries = Object.entries(selectedSymptoms).filter(([, v]) => v > 0);
 
   return (
     <div>
-      <p style={EF.infoBox}>
-        <strong>CF(H,e) = CF(H,E) × CF(E,e)</strong><br />
-        Di mana <em>CF(H,E)</em> adalah bobot kepercayaan pakar (dari basis pengetahuan) dan{" "}
-        <em>CF(E,e)</em> adalah tingkat keyakinan yang Anda berikan. Perkalian keduanya menghasilkan
-        CF individual setiap gejala.
-      </p>
-      <div style={EF.tableWrap}>
-        <table style={EF.table}>
+      <div style={{ padding: "12px 14px", borderRadius: 8, background: "#eff6ff", border: "1px solid #bfdbfe", marginBottom: 16, fontSize: 12.5, color: "#1e40af", lineHeight: 1.7 }}>
+        <strong>CF(H,e) = CF(H,E) × CF(E,e)</strong> — CF(H,E) adalah bobot pakar dari basis pengetahuan, CF(E,e) adalah keyakinan pengguna.
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
           <thead>
-            <tr>
-              <th style={{ ...EF.th, width: 52 }}>Kode</th>
-              <th style={EF.th}>Nama Gejala</th>
-              <th style={{ ...EF.th, width: 80, textAlign: "center" }}>CF(H,E) Pakar</th>
-              <th style={{ ...EF.th, width: 90, textAlign: "center" }}>CF(E,e) Pengguna</th>
-              <th style={{ ...EF.th, width: 80, textAlign: "center" }}>CF(H,e) Final</th>
+            <tr style={{ background: c.forest50 }}>
+              {["Kode", "Nama Gejala", "CF(H,E) Pakar", "CF(E,e) Pengguna", "CF(H,e) Final"].map(h => (
+                <th key={h} style={{ border: "1px solid var(--border, #dde8de)", padding: "8px 10px", fontWeight: 700, textAlign: h.includes("CF") ? "center" : "left", whiteSpace: "nowrap", color: c.forest700, fontSize: 11 }}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {selectedEntries.map(([code, cfEe]) => {
+            {entries.map(([code, cfEe]) => {
               const sym = SYMPTOMS[code];
               const cfHe = (sym.weight * cfEe).toFixed(4);
               return (
-                <tr key={code}>
-                  <td style={{ ...EF.td, fontWeight: 700, color: "#2e7d32" }}>{code}</td>
-                  <td style={EF.td}>{sym.name}</td>
-                  <td style={EF.tdCenter}>{sym.weight}</td>
-                  <td style={EF.tdCenter}>{cfEe}</td>
-                  <td style={{ ...EF.tdCenter, fontWeight: 700, color: "#1976d2" }}>
-                    {sym.weight} × {cfEe} = <span style={{ color: "#2e7d32" }}>{cfHe}</span>
+                <tr key={code} style={{ borderBottom: "1px solid #f0f4f1" }}>
+                  <td style={{ padding: "8px 10px", fontWeight: 700, color: c.forest600, fontFamily: c.monoFont, fontSize: 11 }}>{code}</td>
+                  <td style={{ padding: "8px 10px", color: c.text, fontSize: 12.5 }}>{sym.name}</td>
+                  <td style={{ padding: "8px 10px", textAlign: "center", fontFamily: c.monoFont, fontSize: 12 }}>{sym.weight}</td>
+                  <td style={{ padding: "8px 10px", textAlign: "center", fontFamily: c.monoFont, fontSize: 12 }}>{cfEe}</td>
+                  <td style={{ padding: "8px 10px", textAlign: "center" }}>
+                    <span style={{ fontFamily: c.monoFont, fontSize: 12, color: "#1d4ed8" }}>{sym.weight} × {cfEe}</span>
+                    <span style={{ fontWeight: 700, color: c.forest600, marginLeft: 4, fontFamily: c.monoFont }}>= {cfHe}</span>
                   </td>
                 </tr>
               );
@@ -254,57 +79,58 @@ function TabGejala({ diagnosisData }) {
   );
 }
 
-// ================================================================
-// SUB-VIEW 2: Rule Trace
-// ================================================================
+// ── Tab: Rule Trace ─────────────────────────────────────────────
 function TabRuleTrace({ diagnosisData, RULES_DATA }) {
-  const { cfResults, selectedSymptoms } = diagnosisData;
-  const selectedCodes = Object.entries(selectedSymptoms)
-    .filter(([, v]) => v > 0)
-    .map(([k]) => k);
+  const { selectedSymptoms, cfResults } = diagnosisData;
+  const activeFirst = Object.entries(cfResults || {}).sort((a, b) => b[1].percentage - a[1].percentage);
 
   return (
-    <div>
-      <p style={EF.infoBox}>
-        <strong>Jejak Aturan (Rule Trace)</strong> menunjukkan aturan mana yang aktif
-        (terpicu) berdasarkan gejala yang Anda pilih. Aturan dinyatakan aktif jika minimal
-        satu gejala dalam aturan tersebut cocok dengan gejala yang dipilih.
-      </p>
-      {Object.entries(cfResults).map(([pCode, result]) => {
-        const isActive = result.matchedCodes.length > 0;
-        const ruleGejala = RULES_DATA[pCode] || [];
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {activeFirst.map(([pCode, result]) => {
+        const ruleSymptoms = RULES_DATA[pCode] || [];
+        const isActive = result.percentage > 0;
         return (
-          <div key={pCode} style={EF.ruleBlock(isActive)}>
-            <span style={EF.ruleBadge(isActive)}>{pCode}</span>
-            <div style={EF.ruleText}>
-              <div style={EF.ruleName}>
+          <div key={pCode} style={{
+            padding: "12px 16px", borderRadius: 10,
+            background: isActive ? c.forest50 : "#fafafa",
+            border: `1.5px solid ${isActive ? c.forest200 : "#e5e7eb"}`,
+            opacity: isActive ? 1 : 0.55,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span style={{
+                padding: "2px 8px", borderRadius: 99, fontSize: 10, fontWeight: 700,
+                background: isActive ? c.forest500 : "#d1d5db", color: "white",
+                fontFamily: c.monoFont,
+              }}>
+                {pCode}
+              </span>
+              <span style={{ fontWeight: 600, fontSize: 13, color: isActive ? c.forest700 : "#6b7280" }}>
                 {result.diseaseName}
-                {isActive && (
-                  <span style={{ marginLeft: 8, fontSize: 11, color: "#43a047" }}>
-                    ✓ Aktif — {result.matchedCodes.length} gejala cocok
-                  </span>
-                )}
-              </div>
-              <div style={EF.ruleGejala}>
-                <span style={{ fontSize: 11, color: "#777" }}>JIKA </span>
-                {ruleGejala.map((g) => {
-                  const matched = selectedCodes.includes(g);
-                  return (
-                    <span key={g} style={EF.gejalaChip(matched)}>
-                      {g}{matched ? " ✓" : ""}
-                    </span>
-                  );
-                })}
-                <span style={{ fontSize: 11, color: "#777" }}> MAKA {pCode}</span>
-              </div>
-            </div>
-            {isActive && (
-              <div style={{ flexShrink: 0, textAlign: "right" }}>
-                <span style={{ fontWeight: 700, color: "#2e7d32", fontSize: 14 }}>
+              </span>
+              {isActive && (
+                <span style={{ marginLeft: "auto", fontWeight: 700, fontSize: 13, color: c.forest600, fontFamily: c.monoFont }}>
                   {result.percentage}%
                 </span>
-              </div>
-            )}
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {ruleSymptoms.map(sym => {
+                const matched = selectedSymptoms[sym] > 0;
+                return (
+                  <span key={sym} style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    padding: "2px 8px", borderRadius: 99, fontSize: 11,
+                    fontWeight: matched ? 600 : 400,
+                    background: matched ? c.forest100 : "#f3f4f6",
+                    color: matched ? c.forest700 : "#9ca3af",
+                    border: `1px solid ${matched ? c.forest200 : "#e5e7eb"}`,
+                    fontFamily: c.monoFont,
+                  }}>
+                    {matched && "✓ "}{sym}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         );
       })}
@@ -312,240 +138,120 @@ function TabRuleTrace({ diagnosisData, RULES_DATA }) {
   );
 }
 
-// ================================================================
-// SUB-VIEW 3: Langkah Perhitungan CF (per penyakit)
-// ================================================================
+// ── Tab: Perhitungan ────────────────────────────────────────────
 function TabHitungan({ diagnosisData }) {
-  const { cfResults } = diagnosisData;
-  const activeResults = Object.values(cfResults).filter((r) => r.matchedCodes.length > 0);
-  const [activeDisease, setActiveDisease] = useState(
-    activeResults.length > 0 ? activeResults[0].diseaseCode : null
-  );
+  const { sortedCF } = diagnosisData;
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const hasResult = sortedCF.some(r => r.percentage > 0);
+  if (!hasResult) return <div style={{ textAlign: "center", padding: 32, color: c.textMuted }}>Tidak ada hasil perhitungan.</div>;
 
-  if (activeResults.length === 0) {
-    return (
-      <div style={{ ...EF.empty, padding: 20 }}>
-        Tidak ada penyakit yang terpicu. Pilih minimal satu gejala.
-      </div>
-    );
-  }
-
-  const selected = cfResults[activeDisease] || activeResults[0];
+  const validResults = sortedCF.filter(r => r.percentage > 0);
+  const selected = validResults[selectedIdx] || validResults[0];
 
   return (
     <div>
-      <p style={EF.infoBox}>
-        <strong>Kombinasi CF Sekuensial:</strong>{" "}
-        CF_combine = CF_lama + CF_baru × (1 − CF_lama)<br />
-        Proses ini diulang untuk setiap gejala yang cocok secara berurutan hingga
-        menghasilkan nilai CF akhir penyakit.
-      </p>
-
-      {/* Pilih penyakit */}
-      <div style={{ ...EF.tabBar, borderBottom: "none", marginBottom: 12 }}>
-        {activeResults.map((r) => (
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+        {validResults.slice(0, 4).map((r, idx) => (
           <button
             key={r.diseaseCode}
-            onClick={() => setActiveDisease(r.diseaseCode)}
-            style={EF.tab(activeDisease === r.diseaseCode)}
+            onClick={() => setSelectedIdx(idx)}
+            style={{
+              padding: "6px 14px", fontSize: 12, fontWeight: selectedIdx === idx ? 600 : 400,
+              borderRadius: 99, border: `1.5px solid ${selectedIdx === idx ? c.forest500 : "#e5e7eb"}`,
+              background: selectedIdx === idx ? c.forest700 : "white",
+              color: selectedIdx === idx ? "white" : c.textSecondary,
+              cursor: "pointer",
+            }}
           >
             {r.diseaseCode} — {r.percentage}%
           </button>
         ))}
       </div>
 
-      {/* Langkah-langkah */}
-      <div style={EF.sectionTitle}>
-        Detail Perhitungan: {selected.diseaseName}
-      </div>
-
-      {/* Tabel CF per gejala */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 6 }}>
-          Langkah 1 — Hitung CF(H,e) per gejala yang cocok:
+      {selected.combinationSteps.map((step, idx) => (
+        <div key={idx} style={{
+          borderLeft: `4px solid ${idx === 0 ? c.forest500 : "#60a5fa"}`,
+          background: idx === 0 ? c.forest50 : "#eff6ff",
+          borderRadius: "0 8px 8px 0",
+          padding: "10px 14px",
+          marginBottom: 8,
+        }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 4 }}>LANGKAH {step.step}</p>
+          <p style={{ fontFamily: c.monoFont, fontSize: 12, color: "#1e3a5f", wordBreak: "break-all" }}>{step.description}</p>
+          <p style={{ fontWeight: 700, color: idx === 0 ? c.forest600 : "#1d4ed8", fontSize: 13, marginTop: 4 }}>
+            = {parseFloat(step.result.toFixed(4))}
+          </p>
         </div>
-        <div style={EF.tableWrap}>
-          <table style={EF.table}>
-            <thead>
-              <tr>
-                <th style={{ ...EF.th, width: 50 }}>Kode</th>
-                <th style={EF.th}>Nama Gejala</th>
-                <th style={{ ...EF.th, width: 80, textAlign: "center" }}>CF(H,E)</th>
-                <th style={{ ...EF.th, width: 80, textAlign: "center" }}>CF(E,e)</th>
-                <th style={{ ...EF.th, width: 80, textAlign: "center" }}>CF(H,e)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selected.symptomCFs.map((s) => (
-                <tr key={s.code}>
-                  <td style={{ ...EF.td, fontWeight: 700, color: "#2e7d32" }}>{s.code}</td>
-                  <td style={EF.td}>{s.name}</td>
-                  <td style={EF.tdCenter}>{s.cfHE}</td>
-                  <td style={EF.tdCenter}>{s.cfEe}</td>
-                  <td style={{ ...EF.tdCenter, fontWeight: 700, color: "#1976d2" }}>
-                    {s.cfHe.toFixed(4)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      ))}
 
-      {/* Log kombinasi sekuensial */}
-      {selected.combinationSteps.length > 1 && (
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 8 }}>
-            Langkah 2 — Kombinasi CF Sekuensial:
-          </div>
-          {selected.combinationSteps.map((s, idx) => (
-            <div key={s.step} style={EF.stepBox(idx === 0)}>
-              <div style={EF.stepTitle}>Langkah {s.step}</div>
-              <div style={EF.stepFormula}>{s.description}</div>
-              <div style={EF.stepResult}>= {s.result.toFixed(4)}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Hasil akhir */}
       <div style={{
-        backgroundColor: "#e8f5e9",
-        border: "2px solid #43a047",
-        borderRadius: 8,
-        padding: "12px 18px",
-        marginTop: 12,
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        flexWrap: "wrap",
+        marginTop: 16, padding: "16px 20px", borderRadius: 12,
+        background: "linear-gradient(135deg, var(--forest-50,#edf7ee), white)",
+        border: `2px solid ${c.forest300}`,
+        display: "flex", gap: 20, flexWrap: "wrap",
       }}>
-        <div>
-          <div style={{ fontSize: 11, color: "#555", fontWeight: 700 }}>NILAI CF AKHIR</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#1b5e20" }}>
-            {selected.combinedCF}
+        {[
+          { label: "CF Akhir", val: selected.combinedCF, mono: true },
+          { label: "Persentase", val: `${selected.percentage}%`, mono: true },
+        ].map(item => (
+          <div key={item.label}>
+            <p style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{item.label}</p>
+            <p style={{ fontSize: 24, fontWeight: 800, color: c.forest700, fontFamily: c.monoFont }}>{item.val}</p>
           </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: "#555", fontWeight: 700 }}>PERSENTASE</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: "#2e7d32" }}>
-            {selected.percentage}%
-          </div>
-        </div>
-        <div style={{ flex: 1, minWidth: 120 }}>
-          <div style={{ fontSize: 11, color: "#555", fontWeight: 700, marginBottom: 4 }}>
-            VISUALISASI KEYAKINAN
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={EF.barWrap}>
-              <div style={EF.bar(selected.percentage, "#43a047")} />
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#2e7d32", whiteSpace: "nowrap" }}>
-              {selected.percentage}%
-            </span>
-          </div>
+        ))}
+        <div style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <p style={{ fontSize: 10, color: c.textMuted, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>Visualisasi</p>
+          <ProgressBar pct={selected.percentage} color={c.forest500} height={10} />
         </div>
       </div>
     </div>
   );
 }
 
-// ================================================================
-// SUB-VIEW 4: Perbandingan Top 3 Penyakit
-// ================================================================
+// ── Tab: Perbandingan ───────────────────────────────────────────
 function TabPerbandingan({ diagnosisData }) {
-  const { sortedCF } = diagnosisData;
-  const top3 = sortedCF.filter((r) => r.percentage > 0).slice(0, 3);
-
-  if (top3.length === 0) {
-    return (
-      <div style={{ ...EF.empty, padding: 20 }}>
-        Tidak ada diagnosis yang cocok untuk dibandingkan.
-      </div>
-    );
-  }
+  const top3 = diagnosisData.sortedCF.filter(r => r.percentage > 0).slice(0, 3);
+  if (top3.length === 0) return <div style={{ textAlign: "center", padding: 32, color: "#9ca3af" }}>Tidak ada hasil yang dapat dibandingkan.</div>;
 
   return (
     <div>
-      <p style={EF.infoBox}>
-        <strong>Kenapa sistem memilih diagnosis ini?</strong><br />
-        Tabel berikut membandingkan tiga penyakit dengan nilai CF tertinggi, menampilkan
-        gejala yang menjadi bukti pendukung masing-masing diagnosis.
-      </p>
-
-      <div style={EF.summaryRow}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
         {top3.map((r, idx) => {
-          const c = rankColor(idx);
+          const s = rankStyle(idx);
           return (
-            <div
-              key={r.diseaseCode}
-              style={{
-                flex: "1 1 200px",
-                backgroundColor: c.bg,
-                border: `2px solid ${c.border}`,
-                borderRadius: 8,
-                padding: "14px 16px",
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 700, color: c.text, marginBottom: 4 }}>
-                {idx === 0 ? "🥇 DIAGNOSA UTAMA" : idx === 1 ? "🥈 ALTERNATIF 1" : "🥉 ALTERNATIF 2"}
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 14, color: c.text }}>{r.diseaseName}</div>
-              <div style={{ fontSize: 11, color: "#777", marginTop: 2 }}>{r.diseaseCode}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: c.text, margin: "6px 0 4px" }}>
+            <div key={r.diseaseCode} style={{ padding: "16px", borderRadius: 12, background: s.bg, border: `2px solid ${s.border}` }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: s.text, marginBottom: 6 }}>
+                {idx === 0 ? "🥇 Diagnosa Utama" : idx === 1 ? "🥈 Alternatif 1" : "🥉 Alternatif 2"}
+              </p>
+              <p style={{ fontWeight: 700, fontSize: 13, color: s.text, marginBottom: 2 }}>{r.diseaseName}</p>
+              <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 800, color: s.accent, margin: "8px 0" }}>
                 {r.percentage}%
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={EF.barWrap}>
-                  <div style={EF.bar(r.percentage, c.text)} />
-                </div>
-              </div>
-              <div style={{ fontSize: 11, color: "#555", marginTop: 6 }}>
-                {r.matchedCodes.length} gejala cocok: {r.matchedCodes.join(", ")}
-              </div>
+              </p>
+              <ProgressBar pct={r.percentage} color={s.accent} height={5} />
+              <p style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>{r.matchedCodes.length} gejala cocok</p>
             </div>
           );
         })}
       </div>
-
-      {/* Tabel perbandingan gejala */}
-      <div style={EF.sectionTitle}>Perbandingan Bukti Gejala</div>
-      <div style={EF.tableWrap}>
-        <table style={EF.table}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
           <thead>
-            <tr>
-              <th style={{ ...EF.th, width: 58 }}>Kode</th>
-              <th style={EF.th}>Nama Penyakit</th>
-              <th style={{ ...EF.th, width: 90, textAlign: "center" }}>Nilai CF</th>
-              <th style={{ ...EF.th, width: 110, textAlign: "center" }}>Persentase</th>
-              <th style={{ ...EF.th, width: 80, textAlign: "center" }}>Gejala Cocok</th>
-              <th style={EF.th}>Gejala yang Mendukung</th>
+            <tr style={{ background: "#f9fafb" }}>
+              {["Kode", "Penyakit", "CF", "%", "Gejala Cocok"].map(h => (
+                <th key={h} style={{ padding: "8px 10px", border: "1px solid #e5e7eb", fontWeight: 700, textAlign: "left", fontSize: 11, color: "#374151" }}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {top3.map((r, idx) => {
-              const c = rankColor(idx);
+              const s = rankStyle(idx);
               return (
-                <tr key={r.diseaseCode} style={{ backgroundColor: c.bg }}>
-                  <td style={{ ...EF.td, fontWeight: 700, color: c.text }}>{r.diseaseCode}</td>
-                  <td style={{ ...EF.td, fontWeight: 700, color: c.text }}>{r.diseaseName}</td>
-                  <td style={EF.tdCenter}>{r.combinedCF}</td>
-                  <td style={{ ...EF.tdCenter, fontWeight: 700, color: c.text }}>
-                    {r.percentage}%
-                  </td>
-                  <td style={{ ...EF.tdCenter, fontWeight: 700 }}>{r.matchedCodes.length}</td>
-                  <td style={{ ...EF.td, fontSize: 12 }}>
-                    {r.symptomCFs.map((s) => (
-                      <div key={s.code} style={{ marginBottom: 2 }}>
-                        <span style={{ fontWeight: 700, color: "#2e7d32" }}>{s.code}</span>
-                        {" — "}
-                        <span style={{ color: "#555" }}>{s.name}</span>
-                        <span style={{ color: "#777", marginLeft: 4 }}>
-                          (CF = {s.cfHe.toFixed(4)})
-                        </span>
-                      </div>
-                    ))}
-                  </td>
+                <tr key={r.diseaseCode} style={{ background: s.bg }}>
+                  <td style={{ padding: "8px 10px", fontFamily: "'JetBrains Mono',monospace", fontWeight: 700, color: s.text, fontSize: 11 }}>{r.diseaseCode}</td>
+                  <td style={{ padding: "8px 10px", fontWeight: 600, color: s.text }}>{r.diseaseName}</td>
+                  <td style={{ padding: "8px 10px", fontFamily: "'JetBrains Mono',monospace" }}>{r.combinedCF}</td>
+                  <td style={{ padding: "8px 10px", fontWeight: 700, color: s.accent, fontFamily: "'JetBrains Mono',monospace" }}>{r.percentage}%</td>
+                  <td style={{ padding: "8px 10px" }}>{r.matchedCodes.join(", ")}</td>
                 </tr>
               );
             })}
@@ -556,85 +262,63 @@ function TabPerbandingan({ diagnosisData }) {
   );
 }
 
-// ================================================================
-// KOMPONEN UTAMA: ExplanationFacility
-// ================================================================
+// ── Main Explanation Component ──────────────────────────────────
 const TABS = [
-  { id: "gejala",       label: "📋 Kontribusi Gejala" },
-  { id: "rule",         label: "🔗 Jejak Aturan" },
-  { id: "hitungan",     label: "🧮 Langkah Perhitungan" },
-  { id: "perbandingan", label: "📊 Perbandingan Diagnosis" },
+  { id: "gejala",       label: "Kontribusi Gejala" },
+  { id: "rule",         label: "Jejak Aturan" },
+  { id: "hitungan",     label: "Langkah Perhitungan" },
+  { id: "perbandingan", label: "Perbandingan" },
 ];
 
-// RULES_DATA diterima dari props agar komponen ini mandiri
 export default function ExplanationFacility({ diagnosisData, rulesData }) {
   const [activeTab, setActiveTab] = useState("gejala");
 
-  if (!diagnosisData) {
-    return (
-      <div style={EF.empty}>
-        🔍 Jalankan diagnosis terlebih dahulu untuk melihat penjelasan.<br />
-        <span style={{ fontSize: 12, color: "#a1887f", marginTop: 4, display: "block" }}>
-          Pilih gejala yang diamati, lalu tekan tombol <strong>Diagnosa</strong>.
-        </span>
-      </div>
-    );
-  }
+  if (!diagnosisData) return (
+    <div style={{ padding: 28, textAlign: "center", color: "#92400e", background: "#fffbeb", border: "2px dashed #fde68a", borderRadius: 10 }}>
+      Jalankan diagnosis terlebih dahulu.
+    </div>
+  );
 
-  const hasAnyResult = diagnosisData.sortedCF.some((r) => r.percentage > 0);
+  const hasAnyResult = diagnosisData.sortedCF.some(r => r.percentage > 0);
+  const answeredCount = Object.values(diagnosisData.selectedSymptoms).filter(v => v > 0).length;
+  const activeRules = Object.values(diagnosisData.cfResults || {}).filter(r => r.matchedCodes.length > 0).length;
 
   return (
-    <div style={EF.wrapper}>
-      {/* Ringkasan cepat */}
-      <div style={EF.summaryRow}>
-        <div style={EF.card("#e8f5e9")}>
-          <div style={EF.cardLabel}>Gejala Dipilih</div>
-          <div style={EF.cardValue}>
-            {Object.values(diagnosisData.selectedSymptoms).filter((v) => v > 0).length}
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 20 }}>
+        {[
+          { label: "Gejala Dipilih", val: answeredCount, sub: `dari ${Object.keys(SYMPTOMS).length} tersedia`, color: "#ecfdf5", text: "#065f46" },
+          { label: "Aturan Aktif", val: activeRules, sub: "dari 10 aturan penyakit", color: "#eff6ff", text: "#1e40af" },
+          { label: "Diagnosa Utama", val: hasAnyResult ? diagnosisData.sortedCF[0].percentage + "%" : "—", sub: hasAnyResult ? diagnosisData.sortedCF[0].diseaseName : "Tidak ditemukan", color: "#fdf4ff", text: "#7e22ce" },
+          { label: "Waktu", val: diagnosisData.timestamp.split(",")[1]?.trim() || "—", sub: diagnosisData.timestamp.split(",")[0] || "", color: "#fffbeb", text: "#92400e" },
+        ].map(card => (
+          <div key={card.label} style={{ padding: "12px 14px", borderRadius: 10, background: card.color }}>
+            <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: card.text, opacity: 0.7, marginBottom: 4 }}>{card.label}</p>
+            <p style={{ fontSize: 18, fontWeight: 800, color: card.text, lineHeight: 1.1, marginBottom: 3 }}>{card.val}</p>
+            <p style={{ fontSize: 11, color: card.text, opacity: 0.6 }}>{card.sub}</p>
           </div>
-          <div style={EF.cardSub}>dari {Object.keys(SYMPTOMS).length} gejala tersedia</div>
-        </div>
-        <div style={EF.card("#e3f2fd")}>
-          <div style={EF.cardLabel}>Aturan Aktif</div>
-          <div style={{ ...EF.cardValue, color: "#1565c0" }}>
-            {Object.values(diagnosisData.cfResults).filter((r) => r.matchedCodes.length > 0).length}
-          </div>
-          <div style={EF.cardSub}>dari 10 aturan penyakit</div>
-        </div>
-        <div style={EF.card("#fce4ec")}>
-          <div style={EF.cardLabel}>Diagnosa Utama</div>
-          <div style={{ ...EF.cardValue, color: "#880e4f", fontSize: 13 }}>
-            {hasAnyResult
-              ? diagnosisData.sortedCF[0].diseaseName
-              : "Tidak ditemukan"}
-          </div>
-          <div style={EF.cardSub}>
-            {hasAnyResult ? `CF = ${diagnosisData.sortedCF[0].percentage}%` : "—"}
-          </div>
-        </div>
-        <div style={EF.card("#fff8e1")}>
-          <div style={EF.cardLabel}>Waktu Diagnosis</div>
-          <div style={{ ...EF.cardValue, fontSize: 12, color: "#f57f17" }}>
-            {diagnosisData.timestamp}
-          </div>
-          <div style={EF.cardSub}>Metode: Certainty Factor</div>
-        </div>
-      </div>
-
-      {/* Tab navigasi */}
-      <div style={EF.tabBar}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            style={EF.tab(activeTab === t.id)}
-          >
-            {t.label}
-          </button>
         ))}
       </div>
 
-      {/* Konten tab */}
+      {/* Tab navigation */}
+      <div style={{ display: "flex", gap: 4, borderBottom: "2px solid #e5e7eb", marginBottom: 20 }}>
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setActiveTab(t.id)}
+            style={{
+              padding: "8px 16px", fontSize: 12, fontWeight: activeTab === t.id ? 600 : 400,
+              border: "none", background: "none", cursor: "pointer",
+              color: activeTab === t.id ? "#1e5224" : "#6b7280",
+              borderBottom: activeTab === t.id ? "2px solid #1e5224" : "2px solid transparent",
+              marginBottom: -2, transition: "all 0.15s",
+            }}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      {/* Tab content */}
       {activeTab === "gejala"       && <TabGejala diagnosisData={diagnosisData} />}
       {activeTab === "rule"         && <TabRuleTrace diagnosisData={diagnosisData} RULES_DATA={rulesData} />}
       {activeTab === "hitungan"     && <TabHitungan diagnosisData={diagnosisData} />}
