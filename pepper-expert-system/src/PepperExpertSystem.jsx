@@ -155,8 +155,6 @@ function CertaintySelect({ value, onChange }) {
 
 // ── Screen 1: Initial Symptoms ─────────────────────────────────
 function ScreenInitial({ initialAnswers, setInitialAnswers, onStart }) {
-  const hasPositive = Object.values(initialAnswers).some(v => v > 0);
-
   return (
     <div className="animate-fade">
       <div style={{ marginBottom: 24 }}>
@@ -165,7 +163,7 @@ function ScreenInitial({ initialAnswers, setInitialAnswers, onStart }) {
         </h2>
         <p style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>
           Pilih tingkat keyakinan untuk setiap gejala yang Anda amati pada tanaman lada.
-          Minimal satu gejala harus dipilih untuk memulai analisis.
+          Anda dapat memilih gejala yang diamati atau langsung memulai analisis.
         </p>
       </div>
 
@@ -211,13 +209,12 @@ function ScreenInitial({ initialAnswers, setInitialAnswers, onStart }) {
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button
           onClick={onStart}
-          disabled={!hasPositive}
           style={{
             padding: "12px 32px", fontSize: 14, fontWeight: 600,
-            borderRadius: "var(--radius-full)", border: "none", cursor: hasPositive ? "pointer" : "not-allowed",
-            background: hasPositive ? "var(--forest-700)" : "var(--border)",
-            color: hasPositive ? "white" : "var(--text-faint)",
-            boxShadow: hasPositive ? "0 4px 16px rgba(21,61,26,0.3)" : "none",
+            borderRadius: "var(--radius-full)", border: "none", cursor: "pointer",
+            background: "var(--forest-700)",
+            color: "white",
+            boxShadow: "0 4px 16px rgba(21,61,26,0.3)",
             transition: "all 0.2s ease",
             display: "flex", alignItems: "center", gap: 8,
           }}
@@ -230,11 +227,11 @@ function ScreenInitial({ initialAnswers, setInitialAnswers, onStart }) {
 }
 
 // ── Screen 2: Dynamic Questioning ─────────────────────────────
-function ScreenQuestioning({ answeredSymptoms, questionCount, onAnswer, onFinalize }) {
+function ScreenQuestioning({ answeredSymptoms, questionCount, maxQuestions, onAnswer, onFinalize }) {
   const currentQ = getNextQuestion(answeredSymptoms);
   if (!currentQ) { onFinalize(); return null; }
 
-  const progress = Math.round((questionCount / MAX_QUESTIONS) * 100);
+  const progress = Math.round((questionCount / maxQuestions) * 100);
 
   // Quick peek at top hypothesis
   const cfResults = {};
@@ -249,7 +246,7 @@ function ScreenQuestioning({ answeredSymptoms, questionCount, onAnswer, onFinali
             Sesi Investigasi
           </h2>
           <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            Pertanyaan {questionCount} dari maks. {MAX_QUESTIONS}
+            Pertanyaan {questionCount} dari maks. {maxQuestions}
           </p>
         </div>
         <button
@@ -509,10 +506,10 @@ export default function PepperExpertSystem() {
   const [diagnosisData, setDiagnosisData] = useState(null);
   const [initialAnswers, setInitialAnswers] = useState({ G9: 0, G4: 0, G10: 0, G1: 0, G3: 0 });
   const [questionCount, setQuestionCount] = useState(0);
+  const [allInitialZero, setAllInitialZero] = useState(false);
 
   const handleStartInvestigation = () => {
-    const hasPositive = Object.values(initialAnswers).some(v => v > 0);
-    if (!hasPositive) return;
+    setAllInitialZero(Object.values(initialAnswers).every(v => v === 0));
     setAnsweredSymptoms(initialAnswers);
     setQuestionCount(5);
     const cfResults = {};
@@ -528,9 +525,10 @@ export default function PepperExpertSystem() {
   const handleAnswerQuestion = (symCode, cfValue) => {
     const newAnswered = { ...answeredSymptoms, [symCode]: cfValue };
     const newCount = questionCount + 1;
+    const effectiveMax = allInitialZero ? Object.keys(SYMPTOMS).length : MAX_QUESTIONS;
     setAnsweredSymptoms(newAnswered);
     setQuestionCount(newCount);
-    if (shouldTerminateEarly(newAnswered) || newCount >= MAX_QUESTIONS) {
+    if (shouldTerminateEarly(newAnswered) || newCount >= effectiveMax) {
       finalizeDiagnosis(newAnswered); return;
     }
     const nextQ = getNextQuestion(newAnswered);
@@ -548,7 +546,7 @@ export default function PepperExpertSystem() {
 
   const handleReset = () => {
     setFlowState("INITIAL"); setAnsweredSymptoms({}); setDiagnosisData(null);
-    setInitialAnswers({ G9: 0, G4: 0, G10: 0, G1: 0, G3: 0 }); setQuestionCount(0);
+    setInitialAnswers({ G9: 0, G4: 0, G10: 0, G1: 0, G3: 0 }); setQuestionCount(0); setAllInitialZero(false);
   };
 
   return (
@@ -628,6 +626,7 @@ export default function PepperExpertSystem() {
             <ScreenQuestioning
               answeredSymptoms={answeredSymptoms}
               questionCount={questionCount}
+              maxQuestions={allInitialZero ? Object.keys(SYMPTOMS).length : MAX_QUESTIONS}
               onAnswer={handleAnswerQuestion}
               onFinalize={finalizeDiagnosis}
             />
