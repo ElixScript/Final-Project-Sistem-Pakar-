@@ -44,20 +44,60 @@ const FlaskIcon = () => (
 // ── Progress Step Indicator ─────────────────────────────────────
 function StepIndicator({ current }) {
   const steps = [
-    { id: "INITIAL",     label: "Gejala Awal",    num: 1 },
-    { id: "QUESTIONING", label: "Investigasi",    num: 2 },
+    { id: "INITIAL",     label: "Gejala Awal",     num: 1 },
+    { id: "QUESTIONING", label: "Investigasi",     num: 2 },
     { id: "RESULT",      label: "Hasil Diagnosis", num: 3 },
   ];
   const currentIdx = steps.findIndex(s => s.id === current);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 0, marginBottom: 32 }}>
-      {steps.map((step, idx) => {
-        const done = idx < currentIdx;
-        const active = idx === currentIdx;
-        return (
-          <div key={step.id} style={{ display: "flex", alignItems: "center", flex: idx < steps.length - 1 ? 1 : "auto" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+    <div style={{
+      position: "relative",
+      width: "100%",
+      maxWidth: 720,
+      margin: "0 auto 36px",
+      padding: "0 20px",
+    }}>
+      <div style={{
+        position: "absolute",
+        top: 18,
+        left: "18%",
+        right: "18%",
+        height: 2,
+        background: "var(--border)",
+        zIndex: 0,
+      }} />
+
+      <div style={{
+        position: "absolute",
+        top: 18,
+        left: "18%",
+        width: currentIdx === 0 ? "0%" : currentIdx === 1 ? "32%" : "64%",
+        height: 2,
+        background: "var(--forest-400)",
+        zIndex: 1,
+        transition: "width 0.3s ease",
+      }} />
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(3, 1fr)",
+        alignItems: "start",
+        position: "relative",
+        zIndex: 2,
+      }}>
+        {steps.map((step, idx) => {
+          const done = idx < currentIdx;
+          const active = idx === currentIdx;
+
+          return (
+            <div key={step.id} style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              gap: 6,
+            }}>
               <div style={{
                 width: 36, height: 36, borderRadius: "50%",
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -70,22 +110,19 @@ function StepIndicator({ current }) {
               }}>
                 {done ? <CheckCircleIcon size={16} /> : step.num}
               </div>
+
               <span style={{
-                fontSize: 11, fontWeight: active ? 600 : 400,
+                fontSize: 11,
+                fontWeight: active ? 600 : 400,
                 color: active ? "var(--forest-700)" : done ? "var(--forest-500)" : "var(--text-faint)",
                 whiteSpace: "nowrap",
-              }}>{step.label}</span>
+              }}>
+                {step.label}
+              </span>
             </div>
-            {idx < steps.length - 1 && (
-              <div style={{
-                flex: 1, height: 2, margin: "0 8px", marginTop: -18,
-                background: done ? "var(--forest-400)" : "var(--border)",
-                transition: "background 0.3s ease",
-              }} />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -125,6 +162,56 @@ function ProgressBar({ pct, color = "var(--forest-500)", height = 8 }) {
   );
 }
 
+function getCertaintyStyle(value) {
+  if (value === 1) {
+    return {
+      border: "var(--forest-500)",
+      bg: "var(--forest-50)",
+      text: "var(--forest-700)",
+      activeBg: "var(--forest-700)",
+      shadow: "rgba(46,132,56,0.25)",
+    };
+  }
+
+  if (value === 0.75) {
+    return {
+      border: "#60a5fa",
+      bg: "#eff6ff",
+      text: "#1d4ed8",
+      activeBg: "#2563eb",
+      shadow: "rgba(37,99,235,0.25)",
+    };
+  }
+
+  if (value === 0.5) {
+    return {
+      border: "var(--rose-500)",
+      bg: "var(--rose-100)",
+      text: "var(--rose-500)",
+      activeBg: "var(--rose-500)",
+      shadow: "rgba(225,29,72,0.25)",
+    };
+  }
+
+  if (value === 0.25) {
+    return {
+      border: "var(--amber-500)",
+      bg: "var(--amber-100)",
+      text: "#92400e",
+      activeBg: "var(--amber-500)",
+      shadow: "rgba(217,119,6,0.25)",
+    };
+  }
+
+  return {
+    border: "var(--border)",
+    bg: "white",
+    text: "var(--text-secondary)",
+    activeBg: "var(--slate-700)",
+    shadow: "rgba(51,65,85,0.18)",
+  };
+}
+
 // ── Certainty Select ────────────────────────────────────────────
 function CertaintySelect({ value, onChange }) {
   const options = [
@@ -133,22 +220,27 @@ function CertaintySelect({ value, onChange }) {
   ];
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-      {options.map(opt => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          style={{
-            padding: "6px 14px", fontSize: 12, fontWeight: value === opt.value ? 600 : 400,
-            borderRadius: "var(--radius-full)", cursor: "pointer", transition: "all 0.15s ease",
-            border: `1.5px solid ${value === opt.value ? "var(--forest-500)" : "var(--border)"}`,
-            background: value === opt.value ? "var(--forest-700)" : "white",
-            color: value === opt.value ? "white" : "var(--text-secondary)",
-            boxShadow: value === opt.value ? "0 2px 8px rgba(46,132,56,0.25)" : "none",
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
+      {options.map(opt => {
+        const active = value === opt.value;
+        const styleColor = getCertaintyStyle(opt.value);
+
+        return (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            style={{
+              padding: "6px 14px", fontSize: 12, fontWeight: active ? 600 : 400,
+              borderRadius: "var(--radius-full)", cursor: "pointer", transition: "all 0.15s ease",
+              border: `1.5px solid ${active ? styleColor.activeBg : styleColor.border}`,
+              background: active ? styleColor.activeBg : styleColor.bg,
+              color: active ? "white" : styleColor.text,
+              boxShadow: active ? `0 2px 8px ${styleColor.shadow}` : "none",
+            }}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -304,22 +396,34 @@ function ScreenQuestioning({ answeredSymptoms, questionCount, maxQuestions, onAn
         </p>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {CERTAINTY_LEVELS.map(lvl => (
-            <button
-              key={lvl.value}
-              onClick={() => onAnswer(currentQ.symptomCode, lvl.value)}
-              style={{
-                padding: "10px 20px", fontSize: 13, fontWeight: 500,
-                borderRadius: "var(--radius-full)", border: "1.5px solid var(--forest-300)",
-                background: "var(--forest-50)", color: "var(--forest-700)",
-                cursor: "pointer", transition: "all 0.15s ease",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "var(--forest-700)"; e.currentTarget.style.color = "white"; e.currentTarget.style.borderColor = "var(--forest-700)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "var(--forest-50)"; e.currentTarget.style.color = "var(--forest-700)"; e.currentTarget.style.borderColor = "var(--forest-300)"; }}
-            >
-              Ya — {lvl.label}
-            </button>
-          ))}
+          {CERTAINTY_LEVELS.map(lvl => {
+            const tone = getCertaintyStyle(lvl.value);
+
+            return (
+              <button
+                key={lvl.value}
+                onClick={() => onAnswer(currentQ.symptomCode, lvl.value)}
+                style={{
+                  padding: "10px 20px", fontSize: 13, fontWeight: 500,
+                  borderRadius: "var(--radius-full)", border: `1.5px solid ${tone.border}`,
+                  background: tone.bg, color: tone.text,
+                  cursor: "pointer", transition: "all 0.15s ease",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = tone.activeBg;
+                  e.currentTarget.style.color = "white";
+                  e.currentTarget.style.borderColor = tone.activeBg;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = tone.bg;
+                  e.currentTarget.style.color = tone.text;
+                  e.currentTarget.style.borderColor = tone.border;
+                }}
+              >
+                Ya — {lvl.label}
+              </button>
+            );
+          })}
           <button
             onClick={() => onAnswer(currentQ.symptomCode, 0)}
             style={{
